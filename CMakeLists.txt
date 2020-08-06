@@ -13,6 +13,16 @@ file(STRINGS "qiskit/providers/aer/VERSION.txt" VERSION_NUM)
 
 include(CheckLanguage)
 project(qasm_simulator VERSION ${VERSION_NUM} LANGUAGES CXX C)
+
+# GPU support through Thrust library (CPU fallbacks)
+# Defaults to TRUE, but if no Thrust backend has been defined, will set to FALSE
+if(NOT DEFINED AER_THRUST_BACKEND)
+    set(AER_THRUST_BACKEND $ENV{AER_THRUST_BACKEND})
+    if(DEFINED AER_THRUST_BACKEND)
+        set(AER_THRUST_SUPPORTED TRUE)
+    endif()
+endif()
+
 if(AER_THRUST_BACKEND STREQUAL "CUDA")
   include(FindCUDA) # for cuda_select_nvcc_arch_flags, CUDA_FOUND
   enable_language(CUDA)
@@ -48,7 +58,9 @@ configure_file("${PROJECT_SOURCE_DIR}/contrib/standalone/version.hpp.in"
                "${PROJECT_SOURCE_DIR}/contrib/standalone/version.hpp")
 
 set(AER_SIMULATOR_CPP_SRC_DIR "${PROJECT_SOURCE_DIR}/src")
-set(AER_SIMULATOR_CPP_EXTERNAL_LIBS "${USER_LIB_PATH}")
+set(AER_SIMULATOR_CPP_EXTERNAL_LIBS
+	"${AER_SIMULATOR_CPP_SRC_DIR}/third-party/win64/lib"
+	"${USER_LIB_PATH}")
 
 set(AER_COMPILER_DEFINITIONS "")
 
@@ -176,11 +188,33 @@ if(STATIC_LINKING)
 	set(BLA_STATIC TRUE)
 endif()
 
-if(AER_BLAS_LIB_PATH)
-	find_BLAS_in_specific_path(${AER_BLAS_LIB_PATH})
-else()
-	set(BLAS_LIBRARIES CONAN_PKG::openblas)
+if(STATIC_LINKING)
+	message(STATUS "Setting BLA_STATIC")
+	set(BLA_STATIC TRUE)
 endif()
+
+if(BLAS_LIB_PATH)
+	find_BLAS_in_specific_path(${BLAS_LIB_PATH})
+else()
+	if(APPLE)
+		message(STATUS  "Looking for Apple BLAS library...")
+		set(BLA_VENDOR "Apple")
+	else()
+		message(STATUS "Looking for OpenBLAS library...")
+		set(BLA_VENDOR "OpenBLAS")
+	endif()
+	if(WIN32)
+		message(STATUS "Uncompressing OpenBLAS static library...")
+		execute_process(COMMAND ${CMAKE_COMMAND} -E tar "xvfj" "${AER_SIMULATOR_CPP_SRC_DIR}/third-party/win64/lib/openblas.7z" WORKING_DIRECTORY  "${AER_SIMULATOR_CPP_SRC_DIR}/third-party/win64/lib/")
+	endif()
+	find_package(BLAS QUIET)
+	if(NOT BLAS_FOUND)
+		message(STATUS "OpenBLAS not found. Looking for any other BLAS library...")
+		unset(BLA_VENDOR)
+		find_package(BLAS REQUIRED)
+	endif()
+endif()
+
 message(STATUS "BLAS library found: ${BLAS_LIBRARIES}")
 
 # Windows don't have a DL library (dlopen, dlclose, etc...)
@@ -191,15 +225,14 @@ if(NOT MSVC)
 	endif()
 endif()
 
-if(APPLE OR UNIX)
-	set(SIMD_FLAGS_LIST "-mfma;-mavx2")
-elseif(MSVC)
-	set(SIMD_FLAGS_LIST "/arch:AVX2")
+if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "AMD64")
+	if(APPLE OR UNIX)
+		set(SIMD_FLAGS_LIST "-mfma;-mavx2")
+	elseif(MSVC)
+		set(SIMD_FLAGS_LIST "/arch:AVX2")
+	endif()
 endif()
 
-# GPU support through Thrust library (CPU fallbacks)
-# Defaults to TRUE, but if no Thrust backend has been defined, will set to FALSE
-set(AER_THRUST_SUPPORTED TRUE)
 if(AER_THRUST_SUPPORTED)
 	if(AER_THRUST_BACKEND STREQUAL "CUDA")
 		message(STATUS "Thrust library: Looking for CUDA backend...")
@@ -264,9 +297,11 @@ if(SKBUILD) # Terra Addon build
 	add_subdirectory(src/open_pulse)
 else() # Standalone build
 
-	# We build SIMD filed separately, because they will be reached only if the
-	# machine running the code has SIMD support
-	set(SIMD_SOURCE_FILE "${PROJECT_SOURCE_DIR}/src/simulators/statevector/qv_avx2.cpp")
+	if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "AMD64")
+	  # We build SIMD filed separately, because they will be reached only if the
+	  # machine running the code has SIMD support
+	  set(SIMD_SOURCE_FILE "${PROJECT_SOURCE_DIR}/src/simulators/statevector/qv_avx2.cpp")
+        endif()
 
 	set(AER_SIMULATOR_SOURCES "${PROJECT_SOURCE_DIR}/contrib/standalone/qasm_simulator.cpp")
 	set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
