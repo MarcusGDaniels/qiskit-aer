@@ -17,6 +17,7 @@ set(AER_SIMULATOR_SOURCES "bindings.cc" "${SIMD_SOURCE_FILE}")
 basic_pybind11_add_module(controller_wrappers "${AER_SIMULATOR_SOURCES}")
 
 if(AER_THRUST_BACKEND STREQUAL "CUDA")
+    include(nvcc_add_compiler_options)
     set_source_files_properties(bindings.cc PROPERTIES LANGUAGE CUDA)
 
     if(MSVC)
@@ -27,16 +28,12 @@ if(AER_THRUST_BACKEND STREQUAL "CUDA")
 
     if(DEFINED SIMD_SOURCE_FILE)
        set_source_files_properties(${SIMD_SOURCE_FILE} PROPERTIES LANGUAGE CUDA)
-       set(L ${SIMD_FLAGS_LIST})
-       list(TRANSFORM L PREPEND " --compiler-options ")
-       string(REPLACE ";" " " SIMD_FLAGS_OUT ${L})
+       nvcc_add_compiler_options_list(SIMD_FLAGS_LIST SIMD_FLAGS_OUT)
        set_source_files_properties(${SIMD_SOURCE_FILE} PROPERTIES COMPILE_FLAGS "${CUDA_NVCC_FLAGS} ${SIMD_FLAGS_OUT}")
     endif()
 
     string(STRIP ${AER_COMPILER_FLAGS} AER_COMPILER_FLAGS_STRIPPED)
-    string(REPLACE " " ";" L ${AER_COMPILER_FLAGS_STRIPPED})
-    list(TRANSFORM L PREPEND " --compiler-options ")
-    string(REPLACE ";" " " AER_COMPILER_FLAGS_OUT ${L})
+    nvcc_add_compiler_options(AER_COMPILER_FLAGS_STRIPPED AER_COMPILER_FLAGS_OUT)
     set_target_properties(controller_wrappers PROPERTIES COMPILE_FLAGS "${AER_COMPILER_FLAGS_OUT}")
 else()
     if(DEFINED SIMD_SOURCE_FILE)
@@ -54,4 +51,6 @@ install(TARGETS controller_wrappers LIBRARY DESTINATION qiskit/providers/aer/bac
 # Install redistributable dependencies
 if(APPLE)
     install(FILES "${CONAN_LIB_DIRS_LLVM-OPENMP}/libomp.dylib" DESTINATION qiskit/providers/aer/backends)
+elseif(WIN32 AND NOT BLAS_LIB_PATH)
+    install(FILES ${OPENBLAS_DLLs} DESTINATION qiskit/providers/aer/backends)
 endif()

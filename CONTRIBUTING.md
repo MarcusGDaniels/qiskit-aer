@@ -290,6 +290,23 @@ Ubuntu
 
     $ sudo apt install build-essential
 
+Although the *BLAS* and *LAPACK* library implementations included in the
+*build-essential* package are sufficient to build all of the `Aer` simulators, we
+recommend using *OpenBLAS*, which you can install by running
+
+CentOS/Red Hat
+
+    $ yum install openblas-devel
+
+Fedora
+
+    $ dnf install openblas-devel
+
+Ubuntu
+
+    $ sudo apt install libopenblas-dev
+
+
 And of course, `git` is required in order to build from repositories
 
 CentOS/Red Hat
@@ -386,12 +403,12 @@ options we have on `Aer` to CMake we use it's native mechanism:
 
 #### <a name="mac-dependencies"> Dependencies </a>
 
-There are various methods depending on the compiler we want to use. If we want
-to use the *Clang* compiler, we need to install an extra library for
-supporting *OpenMP*: *libomp*. The *CMake* build system will warn you
-otherwise. To install it manually, in a terminal window, run:
+We recommend installing *OpenBLAS*, which is our default choice:
 
-    $ brew install libomp
+    $ brew install openblas
+
+The *CMake* build system will search for other *BLAS* implementation
+alternatives if *OpenBLAS* is not installed in the system.
 
 You further need to have *Xcode Command Line Tools* installed on macOS:
 
@@ -706,6 +723,22 @@ qiskit-aer$ stestr run
 Manual for `stestr` can be found [here](https://stestr.readthedocs.io/en/latest/MANUAL.html#).
 
 The integration tests for Qiskit python extension are included in: `test/terra`.
+
+## C++ Tests
+
+Our C++ unit tests use the Catch2 framework, an include-only C++ unit-testing framework. 
+Catch2 framework documentation can be found [here](https://github.com/catchorg/Catch2).
+Then, in any case, build Aer with the extra cmake argument BUILD_TESTS set to true:
+
+```
+python ./setup.py bdist_wheel --build-type=Debug -- -DBUILD_TESTS=True -- -j4 2>&1 |tee build.log
+```
+
+The test executable will be placed into the source test directory and can be run by:
+
+```
+qiskit-aer$ ./test/unitc_tests [Catch2-options]
+```
 
 ## Platform support
 
